@@ -84,8 +84,19 @@ namespace GK2ExtractAll
             if (sp == null) return false;
             var r = sp.rect;
             if (r.width < 16f || r.height < 16f) return false;
+            if (IsBadButtonSprite(sp.name)) return false;
             _buttonSprite = sp;
             return true;
+        }
+
+        // Не берём красные/закрывающие спрайты как «игровую кнопку».
+        private static bool IsBadButtonSprite(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            var n = name.ToLowerInvariant();
+            return n.Contains("red") || n.Contains("close") || n.Contains("delete")
+                || n.Contains("cancel") || n.Contains("decline") || n.Contains("remove")
+                || n.Contains("cross") || n.EndsWith("_x") || n.StartsWith("x_");
         }
     }
 }

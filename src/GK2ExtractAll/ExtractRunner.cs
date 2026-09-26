@@ -6,6 +6,7 @@ using GK2ExtractAll.Core;
 using HarmonyLib;
 using LazyBearTechnology;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace GK2ExtractAll
 {
@@ -33,6 +34,10 @@ namespace GK2ExtractAll
         // Кнопка "Начать крафт" в окне выбора: OnStartCraft() проверяет CanStartCraft
         // (startCraftButton.interactable) и вызывает OnStartCraftPressed() -> onStartCraftPressed -> Close().
         private static readonly MethodInfo _confirmCraft = AccessTools.Method(typeof(UIBaseCraftSelectionWindow), "OnStartCraft");
+        // Состояние окна выбора: data (есть ли вообще крафт) и кнопка старта
+        // (её interactable == data.CanStartCraft, т.е. прошла ли валидация игры).
+        private static readonly FieldInfo _craftDataField = AccessTools.Field(typeof(UIBaseCraftSelectionWindow), "data");
+        private static readonly FieldInfo _startCraftButtonField = AccessTools.Field(typeof(UIBaseCraftSelectionWindow), "startCraftButton");
         // Кнопка "Да" в диалоге: UIDialogWindowData.ButtonsData[0].onPressed (yesAction).
         private static readonly FieldInfo _dialogDataField = AccessTools.Field(typeof(UIDialogWindow), "data");
         private static readonly PropertyInfo _buttonsDataProp = AccessTools.Property(typeof(UIDialogWindowData), "ButtonsData");
@@ -137,8 +142,24 @@ namespace GK2ExtractAll
                 {
                     bool confirmed = false;
                     _confirming = true;
-                    try { confirmed = _confirmCraft != null && (bool)_confirmCraft.Invoke(win, null); }
-                    catch (Exception ex) { Plugin.Log.LogWarning("confirm organ: " + ex.Message); }
+                    try
+                    {
+                        // OnStartCraft() входит в подтверждение только когда кнопка
+                        // старта доступна (= data.CanStartCraft). Недоступность —
+                        // штатный пропуск (нет инструмента/знания), не ошибка.
+                        var craftData = _craftDataField != null ? _craftDataField.GetValue(win) : null;
+                        var startButton = _startCraftButtonField != null
+                            ? _startCraftButtonField.GetValue(win) as Selectable : null;
+                        if (craftData != null && startButton != null && startButton.interactable)
+                            confirmed = _confirmCraft != null && (bool)_confirmCraft.Invoke(win, null);
+                        else
+                            Plugin.Log.LogInfo("confirm organ: not available, skipping step");
+                    }
+                    catch (Exception ex)
+                    {
+                        // TargetInvocationException прячет настоящую причину в InnerException.
+                        Plugin.Log.LogWarning("confirm organ: " + (ex.InnerException ?? ex));
+                    }
                     finally { _confirming = false; }
                     if (!confirmed) CloseCraftWindow(win);
                 }
@@ -156,7 +177,7 @@ namespace GK2ExtractAll
                 {
                     _confirming = true;
                     try { ConfirmDialog(win); }
-                    catch (Exception ex) { Plugin.Log.LogWarning("confirm pocket: " + ex.Message); }
+                    catch (Exception ex) { Plugin.Log.LogWarning("confirm pocket: " + (ex.InnerException ?? ex)); }
                     finally { _confirming = false; }
                 }
             }
