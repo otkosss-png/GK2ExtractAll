@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{65CCFCBF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GK2ExtractAll.Core.Tests", "tests\GK2ExtractAll.Core.Tests\GK2ExtractAll.Core.Tests.csproj", "{A5B2A2E7-D6EE-4D89-82C4-6C0FCECE1A13}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GK2ExtractAll", "src\GK2ExtractAll\GK2ExtractAll.csproj", "{D2D03A4B-87FA-4902-8C50-940DEBA5A348}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -28,9 +30,14 @@ Global
 		{A5B2A2E7-D6EE-4D89-82C4-6C0FCECE1A13}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A5B2A2E7-D6EE-4D89-82C4-6C0FCECE1A13}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A5B2A2E7-D6EE-4D89-82C4-6C0FCECE1A13}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2D03A4B-87FA-4902-8C50-940DEBA5A348}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2D03A4B-87FA-4902-8C50-940DEBA5A348}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2D03A4B-87FA-4902-8C50-940DEBA5A348}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2D03A4B-87FA-4902-8C50-940DEBA5A348}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8B2841A8-33B7-4261-AAD5-3B31D8202E02} = {DF6F7DE8-9B4A-4EB2-BBD2-AEFFE4BCEA7A}
 		{A5B2A2E7-D6EE-4D89-82C4-6C0FCECE1A13} = {65CCFCBF-2D08-4FF8-99BE-CCD6B760DF11}
+		{D2D03A4B-87FA-4902-8C50-940DEBA5A348} = {DF6F7DE8-9B4A-4EB2-BBD2-AEFFE4BCEA7A}
 	EndGlobalSection
 EndGlobal
