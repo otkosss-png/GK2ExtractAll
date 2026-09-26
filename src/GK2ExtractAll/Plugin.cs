@@ -41,9 +41,9 @@ namespace GK2ExtractAll
         private void EnsureSettings()
         {
             if (Mod.DelayMs != null) return;
-            Mod.Language = Config.Bind("General", "Language", "en", "auto | en | ru");
-            Mod.ButtonEnabled = Config.Bind("General", "Enabled", true, "Show the 'Extract all' button");
-            Mod.DelayMs = Config.Bind("General", "DelayMs", 500, "Delay between extractions (ms)");
+            Mod.Language = Config.Bind("General", "Language", Mod.DefaultLanguage, "auto | en | ru");
+            Mod.ButtonEnabled = Config.Bind("General", "Enabled", Mod.DefaultEnabled, "Show the 'Extract all' button");
+            Mod.DelayMs = Config.Bind("General", "DelayMs", Mod.DefaultDelayMs, "Delay between extractions (ms)");
         }
 
         internal static Lang ResolveLanguage(string value)

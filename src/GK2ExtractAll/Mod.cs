@@ -6,6 +6,10 @@ namespace GK2ExtractAll
     // Настройки появляются в игровом меню Mods (GK2 Mod Framework).
     internal sealed class Mod : Gk2ModBase
     {
+        internal const string DefaultLanguage = "en";
+        internal const bool DefaultEnabled = true;
+        internal const int DefaultDelayMs = 500;
+
         private readonly Gk2ModMetadata _metadata = new Gk2ModMetadata(
             "otkosss.gk2.extractall",
             "GK2 Extract All",
@@ -24,11 +28,11 @@ namespace GK2ExtractAll
         public override void OnRegister(Gk2ModContext context)
         {
             var s = context.Settings;
-            Language = s.AddDropdown("General", "Language", "en", new[] { "auto", "en", "ru" },
+            Language = s.AddDropdown("General", "Language", DefaultLanguage, new[] { "auto", "en", "ru" },
                 "Language / Язык", "en, ru, auto (system)", 10);
-            ButtonEnabled = s.AddToggle("General", "Enabled", true,
+            ButtonEnabled = s.AddToggle("General", "Enabled", DefaultEnabled,
                 "Кнопка «Извлечь всё»", "Показывать кнопку в окне вскрытия", 20);
-            DelayMs = s.AddIntSlider("General", "DelayMs", 500, 100, 2000,
+            DelayMs = s.AddIntSlider("General", "DelayMs", DefaultDelayMs, 100, 2000,
                 "Задержка между извлечениями (мс)", "Как быстро идут шаги", 5, 30);
         }
     }
