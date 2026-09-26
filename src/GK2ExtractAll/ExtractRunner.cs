@@ -1,26 +1,52 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using GK2ExtractAll.Core;
 using HarmonyLib;
+using LazyBearTechnology;
 using UnityEngine;
 
 namespace GK2ExtractAll
 {
     internal sealed class ExtractRunner : MonoBehaviour
     {
+        private const float PollStep = 0.05f;
+        private const float PollTimeout = 1f;
+
         private static ExtractRunner _instance;
         private UIAutopsyWindow _window;
         private Coroutine _co;
+        // Пока мы внутри шага подтверждения, игра сама закрывает окно вскрытия
+        // (confirm-колбэки вызывают UIAutopsyWindow.Close()) — не считаем это
+        // закрытием пользователем и не останавливаем проход.
+        private bool _confirming;
 
         // Поля виджетов приватные; списки ячеек тоже приватные.
         private static readonly FieldInfo _organsField = AccessTools.Field(typeof(UIAutopsyWindow), "bodyOrgansInventoryWidget");
         private static readonly FieldInfo _pocketsField = AccessTools.Field(typeof(UIAutopsyWindow), "bodyPocketInventoryWidget");
         private static readonly FieldInfo _organCellsField = AccessTools.Field(typeof(BodyOrgansInventoryWidget), "mainOrgansFixedTypeItemCells");
         private static readonly FieldInfo _pocketCellsField = AccessTools.Field(typeof(BodyPocketInventoryWidget), "cells");
-        // Штатные методы извлечения приватные.
+        // TryExtract* только ОТКРЫВАЮТ окно выбора; извлечение делают confirm-колбэки.
         private static readonly MethodInfo _extractOrgan = AccessTools.Method(typeof(UIAutopsyWindowData), "TryExtractMainOrgan", new[] { typeof(UIItemCell) });
         private static readonly MethodInfo _extractPocket = AccessTools.Method(typeof(UIAutopsyWindowData), "TryExtractItemFromPocket", new[] { typeof(UIItemCell) });
+        // Кнопка "Начать крафт" в окне выбора: OnStartCraft() проверяет CanStartCraft
+        // (startCraftButton.interactable) и вызывает OnStartCraftPressed() -> onStartCraftPressed -> Close().
+        private static readonly MethodInfo _confirmCraft = AccessTools.Method(typeof(UIBaseCraftSelectionWindow), "OnStartCraft");
+        // Кнопка "Да" в диалоге: UIDialogWindowData.ButtonsData[0].onPressed (yesAction).
+        private static readonly FieldInfo _dialogDataField = AccessTools.Field(typeof(UIDialogWindow), "data");
+        private static readonly PropertyInfo _buttonsDataProp = AccessTools.Property(typeof(UIDialogWindowData), "ButtonsData");
+        private static readonly FieldInfo _onPressedField = FindNestedField(typeof(UIDialogWindowData), "ButtonData", "onPressed");
+
+        private static FieldInfo FindNestedField(Type owner, string nestedName, string fieldName)
+        {
+            try
+            {
+                var nested = owner != null ? owner.GetNestedType(nestedName, BindingFlags.Public | BindingFlags.NonPublic) : null;
+                return nested != null ? AccessTools.Field(nested, fieldName) : null;
+            }
+            catch { return null; }
+        }
 
         internal static void Start(UIAutopsyWindow window)
         {
@@ -40,34 +66,50 @@ namespace GK2ExtractAll
             if (_instance != null) _instance._co = null;
         }
 
+        // Вызывается из UI-патча Hide: если окно закрыла сама игра в рамках нашего
+        // подтверждения — игнорируем, иначе останавливаем проход.
+        internal static void OnWindowHidden()
+        {
+            if (_instance != null && _instance._confirming) return;
+            StopIfRunning();
+        }
+
         private void Run(UIAutopsyWindow window)
         {
             StopIfRunning();
             _window = window;
+            _confirming = false;
             _co = StartCoroutine(Loop());
         }
 
         private IEnumerator Loop()
         {
             var queue = new ExtractQueue();
-            queue.Begin(CountItems());
+            // Planned считаем по тому же предикату, что и выбор (IsUsable), иначе
+            // заполненная, но недоступная ячейка раздувает знаменатель итога.
+            queue.Begin(Collect().Count);
             float delay = Mathf.Clamp(Plugin.Mod.DelayMs.Value, 100, 2000) / 1000f;
 
             while (true)
             {
-                int items = CountItems();
-                if (queue.ShouldStop(items)) break;
+                var present = Collect();
+                if (queue.ShouldStop(present.Count)) break;
 
-                var next = queue.TakeNext(Collect());
+                var next = queue.TakeNext(present);
                 if (next == null) break;
 
-                int before = items;
+                int before = CountItems();
                 Trigger(next);
-                yield return new WaitForSeconds(delay);
+                yield return ConfirmStep(next.Kind, delay);
 
                 bool ok = CountItems() < before;
                 if (ok) queue.RecordExtracted(); // TakeNext уже пометил ячейку обработанной
                 else queue.RecordSkipped(next.Id);
+
+                // Confirm-колбэк закрывает окно вскрытия; возвращаем его, чтобы
+                // следующие шаги шли штатно и итоговая подпись была видна.
+                ReopenIfClosed();
+                yield return null;
             }
 
             string text = queue.Planned == 0
@@ -76,6 +118,94 @@ namespace GK2ExtractAll
             ExtractAllButton.SetResult(_window, text);
             Plugin.Log.LogInfo("extract-all: " + queue.Extracted + "/" + queue.Planned
                 + " (skipped " + queue.Skipped + ", steps " + queue.Steps + ")");
+        }
+
+        // Ждёт появления модалки шага, подтверждает её (или закрывает, если
+        // подтверждение недоступно) и выдерживает задержку между шагами.
+        private IEnumerator ConfirmStep(CellKind kind, float delay)
+        {
+            if (kind == CellKind.Organ)
+            {
+                UICraftSelectionWindow win = null;
+                for (float t = 0f; t < PollTimeout; t += PollStep)
+                {
+                    win = GetCraftWindow();
+                    if (win != null && win.IsShown) break;
+                    yield return new WaitForSeconds(PollStep);
+                }
+                if (win != null && win.IsShown)
+                {
+                    bool confirmed = false;
+                    _confirming = true;
+                    try { confirmed = _confirmCraft != null && (bool)_confirmCraft.Invoke(win, null); }
+                    catch (Exception ex) { Plugin.Log.LogWarning("confirm organ: " + ex.Message); }
+                    finally { _confirming = false; }
+                    if (!confirmed) CloseCraftWindow(win);
+                }
+            }
+            else
+            {
+                UIDialogWindow win = null;
+                for (float t = 0f; t < PollTimeout; t += PollStep)
+                {
+                    win = GetDialogWindow();
+                    if (win != null && win.IsShown) break;
+                    yield return new WaitForSeconds(PollStep);
+                }
+                if (win != null && win.IsShown)
+                {
+                    _confirming = true;
+                    try { ConfirmDialog(win); }
+                    catch (Exception ex) { Plugin.Log.LogWarning("confirm pocket: " + ex.Message); }
+                    finally { _confirming = false; }
+                }
+            }
+            yield return new WaitForSeconds(delay);
+        }
+
+        private static UICraftSelectionWindow GetCraftWindow()
+        {
+            try { return LazyUI.GetWindow<UICraftSelectionWindow>(); }
+            catch { return null; }
+        }
+
+        private static UIDialogWindow GetDialogWindow()
+        {
+            try { return LazyUI.GetWindow<UIDialogWindow>(); }
+            catch { return null; }
+        }
+
+        private static void CloseCraftWindow(UICraftSelectionWindow win)
+        {
+            try { if (win != null) win.Close(); }
+            catch (Exception ex) { Plugin.Log.LogWarning("dismiss craft: " + ex.Message); }
+        }
+
+        private void ConfirmDialog(UIDialogWindow win)
+        {
+            var data = _dialogDataField != null ? _dialogDataField.GetValue(win) : null;
+            var buttons = data != null && _buttonsDataProp != null
+                ? _buttonsDataProp.GetValue(data, null) as IList : null;
+            if (buttons != null && buttons.Count > 0)
+            {
+                var first = buttons[0];
+                var action = first != null && _onPressedField != null
+                    ? _onPressedField.GetValue(first) as Action : null;
+                if (action != null) { action.Invoke(); return; }
+            }
+            try { if (win != null) win.Close(); }
+            catch (Exception ex) { Plugin.Log.LogWarning("dismiss dialog: " + ex.Message); }
+        }
+
+        private void ReopenIfClosed()
+        {
+            try
+            {
+                if (_window == null || _window.IsShown) return;
+                var data = ExtractAllButton.DataOf(_window);
+                if (data != null) _window.Open(data);
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning("reopen autopsy: " + ex.Message); }
         }
 
         private bool HasData()
@@ -155,7 +285,7 @@ namespace GK2ExtractAll
                     if (_extractPocket != null) _extractPocket.Invoke(data, new object[] { c });
                 }
             }
-            catch (System.Exception ex) { Plugin.Log.LogWarning("extract step: " + ex.Message); }
+            catch (Exception ex) { Plugin.Log.LogWarning("extract step: " + ex.Message); }
         }
 
         private UIItemCell Resolve(string id)

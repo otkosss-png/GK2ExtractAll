@@ -41,24 +41,39 @@ namespace GK2ExtractAll
             var parent = window.transform as RectTransform;
             if (parent == null) return;
 
-            var btn = UiFactory.TextButton("ExtractAllBtn", parent, ExtractText.Button(Plugin.Lang), 26);
-            var rt = (RectTransform)btn.transform;
-            rt.anchorMin = new Vector2(0.5f, 0f);
-            rt.anchorMax = new Vector2(0.5f, 0f);
-            rt.pivot = new Vector2(0.5f, 0f);
-            rt.anchoredPosition = new Vector2(0f, 40f);
-            rt.sizeDelta = new Vector2(230f, 54f);
-            btn.onClick.AddListener(() => ExtractRunner.Start(window));
+            // UIAutopsyWindow — кэшируемый синглтон: при повторном открытии могли
+            // остаться созданные ранее объекты. Переиспользуем их по имени.
+            var btn = FindChild<Button>(parent, "ExtractAllBtn");
+            if (btn == null)
+            {
+                btn = UiFactory.TextButton("ExtractAllBtn", parent, ExtractText.Button(Plugin.Lang), 26);
+                var rt = (RectTransform)btn.transform;
+                rt.anchorMin = new Vector2(0.5f, 0f);
+                rt.anchorMax = new Vector2(0.5f, 0f);
+                rt.pivot = new Vector2(0.5f, 0f);
+                rt.anchoredPosition = new Vector2(0f, 40f);
+                rt.sizeDelta = new Vector2(230f, 54f);
+                btn.onClick.AddListener(() => ExtractRunner.Start(window));
+            }
+            else
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(() => ExtractRunner.Start(window));
+            }
 
-            var label = UiFactory.Label("ResultLabel", parent, string.Empty, 24,
-                TextAlignmentOptions.Center, Color.white);
-            var lrt = label.rectTransform;
-            lrt.anchorMin = new Vector2(0.5f, 0f);
-            lrt.anchorMax = new Vector2(0.5f, 0f);
-            lrt.pivot = new Vector2(0.5f, 0f);
-            lrt.anchoredPosition = new Vector2(0f, 100f);
-            lrt.sizeDelta = new Vector2(500f, 34f);
-            label.gameObject.SetActive(false);
+            var label = FindChild<TextMeshProUGUI>(parent, "ResultLabel");
+            if (label == null)
+            {
+                label = UiFactory.Label("ResultLabel", parent, string.Empty, 24,
+                    TextAlignmentOptions.Center, Color.white);
+                var lrt = label.rectTransform;
+                lrt.anchorMin = new Vector2(0.5f, 0f);
+                lrt.anchorMax = new Vector2(0.5f, 0f);
+                lrt.pivot = new Vector2(0.5f, 0f);
+                lrt.anchoredPosition = new Vector2(0f, 100f);
+                lrt.sizeDelta = new Vector2(500f, 34f);
+                label.gameObject.SetActive(false);
+            }
 
             _buttons[key] = btn;
             _results[key] = label;
@@ -67,9 +82,15 @@ namespace GK2ExtractAll
 
         internal static void Clear()
         {
+            // Hide() лишь деактивирует окно, поэтому созданные дочерние объекты
+            // надо реально уничтожить — иначе повторное открытие их накопит.
+            foreach (var kv in _buttons)
+                if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value.gameObject);
+            foreach (var kv in _results)
+                if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value.gameObject);
             _buttons.Clear();
             _results.Clear();
-            ExtractRunner.StopIfRunning();
+            ExtractRunner.OnWindowHidden();
         }
 
         internal static void SetResult(UIAutopsyWindow window, string text)
@@ -78,6 +99,13 @@ namespace GK2ExtractAll
             if (!_results.TryGetValue(window.GetInstanceID(), out var label) || label == null) return;
             label.text = text;
             label.gameObject.SetActive(!string.IsNullOrEmpty(text));
+        }
+
+        private static T FindChild<T>(Transform parent, string name) where T : Component
+        {
+            if (parent == null) return null;
+            var t = parent.Find(name);
+            return t != null ? t.GetComponent<T>() : null;
         }
 
         private static bool IsEmpty(UIAutopsyWindow window)
