@@ -245,12 +245,17 @@ namespace GK2ExtractAll.Core
             Steps = 0;
         }
 
+        // Возвращает первую ещё не обработанную ячейку и сразу помечает её
+        // обработанной (за один запуск каждая ячейка берётся не более одного раза).
         public CellRef TakeNext(IEnumerable<CellRef> present)
         {
             if (present == null) return null;
             foreach (var c in present)
                 if (c != null && !string.IsNullOrEmpty(c.Id) && !_attempted.Contains(c.Id))
+                {
+                    _attempted.Add(c.Id);
                     return c;
+                }
             return null;
         }
 
@@ -756,7 +761,7 @@ namespace GK2ExtractAll
                 yield return new WaitForSeconds(delay);
 
                 bool ok = CountItems() < before;
-                if (ok) { queue.RecordExtracted(); queue.MarkAttempted(next.Id); }
+                if (ok) queue.RecordExtracted(); // TakeNext уже пометил ячейку обработанной
                 else queue.RecordSkipped(next.Id);
             }
 
