@@ -8,7 +8,7 @@ using GK2ExtractAll.Core;
 namespace GK2ExtractAll
 {
     [BepInDependency("ru.superman4eg.gk2.framework")]
-    [BepInPlugin(Guid, "GK2 Extract All", "1.2.0")]
+    [BepInPlugin(Guid, "GK2 Extract All", "1.2.1")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "otkosss.gk2.extractall";

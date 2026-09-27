@@ -38,7 +38,10 @@ namespace GK2ExtractAll
                     return true;
                 });
 
+                // Переключить значок ячейки, на которой фокус геймпада: пробуем оба бампера
+                // (какой-то из них окно не использует — тот и сработает).
                 TryAdd(__result, GameKey.RightBumper, () => ExtractMarks.ToggleFocused());
+                TryAdd(__result, GameKey.LeftTrigger, () => ExtractMarks.ToggleFocused());
             }
             catch (Exception ex) { Plugin.Log.LogWarning("game keys: " + ex.Message); }
         }

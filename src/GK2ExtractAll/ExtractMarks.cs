@@ -37,6 +37,16 @@ namespace GK2ExtractAll
         internal static int TotalCount => Instance != null && Instance._selection != null
             ? Instance._selection.Count : 0;
 
+        // Ячейка -> id выбора: для геймпада (A на ячейке в режиме выбора ставит/снимает отметку).
+        internal static bool ToggleByCell(UIItemCell cell)
+        {
+            if (Instance == null || !Instance._active || cell == null || Instance._handles == null) return false;
+            var id = ExtractRunner.IdOf(Instance._handles, cell);
+            if (id == null) return false;
+            Instance.Toggle(id);
+            return true;
+        }
+
         // Включить режим: построить выбор (по запомненному пресету) и показать значки.
         internal static void EnterMode(UIAutopsyWindow window)
         {

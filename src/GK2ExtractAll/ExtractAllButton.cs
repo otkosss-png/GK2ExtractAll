@@ -141,6 +141,14 @@ namespace GK2ExtractAll
 
             _buttons[key] = btn;
             _results[key] = label;
+            // Геймпад: регистрируем обе кнопки в навигации контроллера окна.
+            ExtractNav.Register(window.gameObject, btn, () => ExtractRunner.Start(window));
+            ExtractNav.Register(window.gameObject, pick, () =>
+            {
+                if (ExtractMarks.IsModeFor(window)) ExtractMarks.RunSelected(window);
+                else ExtractMarks.EnterMode(window);
+            });
+            ExtractNav.Attach(window.gameObject);
             Plugin.Log.LogInfo("autopsy: extract-all button added");
 
             if (_diagnosed.Add(key))
@@ -186,7 +194,12 @@ namespace GK2ExtractAll
             // Hide() лишь деактивирует окно, поэтому созданные дочерние объекты
             // надо реально уничтожить — иначе повторное открытие их накопит.
             foreach (var kv in _buttons)
-                if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value.gameObject);
+                if (kv.Value != null)
+                {
+                    var w = kv.Value.transform.parent;
+                    if (w != null) ExtractNav.Unregister(w.gameObject);
+                    UnityEngine.Object.Destroy(kv.Value.gameObject);
+                }
             foreach (var kv in _results)
                 if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value.gameObject);
             _buttons.Clear();
