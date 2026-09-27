@@ -9,6 +9,8 @@ namespace GK2ExtractAll
         private static void Postfix(UIAutopsyWindow __instance)
         {
             ExtractAllButton.Ensure(__instance);
+            // В режиме выбора состав ячеек мог измениться (вырезали предмет) — ок.
+            if (ExtractMarks.ModeOn && !ExtractMarks.IsModeFor(__instance)) ExtractMarks.ExitMode();
         }
     }
 
@@ -18,6 +20,7 @@ namespace GK2ExtractAll
         [HarmonyPostfix]
         private static void Postfix(UIAutopsyWindow __instance)
         {
+            ExtractMarks.ExitMode();
             ExtractAllButton.Clear();
         }
     }

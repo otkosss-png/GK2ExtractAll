@@ -36,6 +36,13 @@ namespace GK2ExtractAll
                 bool on = Plugin.Mod.ButtonEnabled.Value;
                 existing.gameObject.SetActive(on);
                 existing.interactable = on && !IsEmpty(window);
+                var pickExisting = FindChild<Button>(window.transform as RectTransform, "ExtractPickBtn");
+                if (pickExisting != null)
+                {
+                    pickExisting.gameObject.SetActive(on);
+                    pickExisting.interactable = on && !IsEmpty(window);
+                }
+                UpdateModeLabel(window);
                 return;
             }
 
@@ -69,6 +76,48 @@ namespace GK2ExtractAll
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => ExtractRunner.Start(window));
             }
+
+            // Геометрию задаём при каждом Ensure: layout-группы окна могли её переписать.
+            var allRt = (RectTransform)btn.transform;
+            allRt.anchorMin = new Vector2(0.5f, 0f);
+            allRt.anchorMax = new Vector2(0.5f, 0f);
+            allRt.pivot = new Vector2(0.5f, 0f);
+            allRt.sizeDelta = new Vector2(250f, 54f);
+            allRt.anchoredPosition = new Vector2(-140f, 40f);
+
+            // Вторая кнопка: «Выбрать…» → включает режим (на ячейках появляются значки),
+            // в режиме она же — «Вырезать». Значки живут на своём оверлей-канвасе
+            // (как «пин» в Recipe Pin), клик по значку — вкл/выкл.
+            var pick = FindChild<Button>(parent, "ExtractPickBtn");
+            if (pick == null)
+            {
+                pick = UiFactory.TextButton("ExtractPickBtn", parent, ExtractText.SelectButton(Plugin.Lang), 26);
+                var capturedPick = pick;
+                pick.onClick.AddListener(() =>
+                {
+                    if (ExtractMarks.IsModeFor(window)) ExtractMarks.RunSelected(window);
+                    else ExtractMarks.EnterMode(window);
+                });
+                var pickLabel0 = capturedPick.GetComponentInChildren<TextMeshProUGUI>(true);
+                UiFactory.ApplyReferenceFont(pickLabel0, reference);
+            }
+            else
+            {
+                pick.onClick.RemoveAllListeners();
+                pick.onClick.AddListener(() =>
+                {
+                    if (ExtractMarks.IsModeFor(window)) ExtractMarks.RunSelected(window);
+                    else ExtractMarks.EnterMode(window);
+                });
+            }
+
+            var pickRt = (RectTransform)pick.transform;
+            pickRt.anchorMin = new Vector2(0.5f, 0f);
+            pickRt.anchorMax = new Vector2(0.5f, 0f);
+            pickRt.pivot = new Vector2(0.5f, 0f);
+            pickRt.sizeDelta = new Vector2(250f, 54f);
+            pickRt.anchoredPosition = new Vector2(140f, 40f);
+            UpdateModeLabel(window);
 
             var label = FindChild<TextMeshProUGUI>(parent, "ResultLabel");
             if (label == null)
@@ -149,9 +198,27 @@ namespace GK2ExtractAll
         internal static void SetResult(UIAutopsyWindow window, string text)
         {
             if (window == null) return;
+            if (window == null) return;
             if (!_results.TryGetValue(window.GetInstanceID(), out var label) || label == null) return;
             label.text = text;
             label.gameObject.SetActive(!string.IsNullOrEmpty(text));
+        }
+
+        // Подпись второй кнопки: зависит от режима выбора.
+        internal static void UpdateModeLabel(UIAutopsyWindow window)
+        {
+            try
+            {
+                if (window == null) return;
+                var pick = FindChild<Button>(window.transform as RectTransform, "ExtractPickBtn");
+                if (pick == null) return;
+                var label = pick.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (label == null) return;
+                label.text = ExtractMarks.IsModeFor(window)
+                    ? ExtractText.RunSelected(Plugin.Lang)
+                    : ExtractText.SelectButton(Plugin.Lang);
+            }
+            catch { }
         }
 
         private static T FindChild<T>(Transform parent, string name) where T : Component

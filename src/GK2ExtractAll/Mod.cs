@@ -14,7 +14,7 @@ namespace GK2ExtractAll
             "otkosss.gk2.extractall",
             "GK2 Extract All",
             "otkosss",
-            "1.0.0",
+            "1.1.0",
             "Adds an 'Extract all' button to the autopsy window: pulls every organ and pocket item out of a corpse.",
             false,
             false);
@@ -22,6 +22,7 @@ namespace GK2ExtractAll
         internal ConfigEntry<string> Language;
         internal ConfigEntry<bool> ButtonEnabled;
         internal ConfigEntry<int> DelayMs;
+        internal ConfigEntry<string> SelectionPreset;
 
         public override Gk2ModMetadata Metadata => _metadata;
 
@@ -34,6 +35,9 @@ namespace GK2ExtractAll
                 "Кнопка «Извлечь всё»", "Показывать кнопку в окне вскрытия", 20);
             DelayMs = s.AddIntSlider("General", "DelayMs", DefaultDelayMs, 100, 2000,
                 "Задержка между извлечениями (мс)", "Как быстро идут шаги", 5, 30);
+            SelectionPreset = s.AddDropdown("General", "SelectionPreset", "all",
+                new[] { "all", "organs", "pockets", "none" },
+                "Пресет выбора", "Что отмечать в панели «Что вырезать» по умолчанию", 6);
         }
     }
 }

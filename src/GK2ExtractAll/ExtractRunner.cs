@@ -17,6 +17,7 @@ namespace GK2ExtractAll
 
         private static ExtractRunner _instance;
         private UIAutopsyWindow _window;
+        private ExtractSelection _selection;
         private Coroutine _co;
         // Пока мы внутри шага подтверждения, игра сама закрывает окно вскрытия
         // (confirm-колбэки вызывают UIAutopsyWindow.Close()) — не считаем это
@@ -55,6 +56,12 @@ namespace GK2ExtractAll
 
         internal static void Start(UIAutopsyWindow window)
         {
+            Start(window, null); // без выбора — как раньше, всё подряд
+        }
+
+        // selection == null => всё; иначе только отмеченные ячейки.
+        internal static void Start(UIAutopsyWindow window, ExtractSelection selection)
+        {
             if (window == null) return;
             if (_instance == null)
             {
@@ -62,7 +69,7 @@ namespace GK2ExtractAll
                 DontDestroyOnLoad(go);
                 _instance = go.AddComponent<ExtractRunner>();
             }
-            _instance.Run(window);
+            _instance.Run(window, selection);
         }
 
         internal static void StopIfRunning()
@@ -79,10 +86,11 @@ namespace GK2ExtractAll
             StopIfRunning();
         }
 
-        private void Run(UIAutopsyWindow window)
+        private void Run(UIAutopsyWindow window, ExtractSelection selection)
         {
             StopIfRunning();
             _window = window;
+            _selection = selection;
             _confirming = false;
             _co = StartCoroutine(Loop());
         }
@@ -92,12 +100,12 @@ namespace GK2ExtractAll
             var queue = new ExtractQueue();
             // Planned считаем по тому же предикату, что и выбор (IsUsable), иначе
             // заполненная, но недоступная ячейка раздувает знаменатель итога.
-            queue.Begin(Collect().Count);
+            queue.Begin(Collect(_window, _selection).Count);
             float delay = Mathf.Clamp(Plugin.Mod.DelayMs.Value, 100, 2000) / 1000f;
 
             while (true)
             {
-                var present = Collect();
+                var present = Collect(_window, _selection);
                 if (queue.ShouldStop(present.Count)) break;
 
                 var next = queue.TakeNext(present);
@@ -235,22 +243,22 @@ namespace GK2ExtractAll
             catch { return false; }
         }
 
-        private List<UIFixedTypeItemCell> OrganCells()
+        private static List<UIFixedTypeItemCell> OrganCells(UIAutopsyWindow window)
         {
             try
             {
-                var w = _organsField != null ? _organsField.GetValue(_window) as BodyOrgansInventoryWidget : null;
+                var w = _organsField != null ? _organsField.GetValue(window) as BodyOrgansInventoryWidget : null;
                 if (w == null || _organCellsField == null) return null;
                 return _organCellsField.GetValue(w) as List<UIFixedTypeItemCell>;
             }
             catch { return null; }
         }
 
-        private List<UIItemCell> PocketCells()
+        private static List<UIItemCell> PocketCells(UIAutopsyWindow window)
         {
             try
             {
-                var w = _pocketsField != null ? _pocketsField.GetValue(_window) as BodyPocketInventoryWidget : null;
+                var w = _pocketsField != null ? _pocketsField.GetValue(window) as BodyPocketInventoryWidget : null;
                 if (w == null || _pocketCellsField == null) return null;
                 return _pocketCellsField.GetValue(w) as List<UIItemCell>;
             }
@@ -261,32 +269,124 @@ namespace GK2ExtractAll
         {
             if (!HasData()) return 0;
             int n = 0;
-            var organs = OrganCells();
+            var organs = OrganCells(_window);
             if (organs != null)
                 foreach (var c in organs)
                     if (IsFilled(OrganCell(c))) n++;
-            var pockets = PocketCells();
+            var pockets = PocketCells(_window);
             if (pockets != null)
                 foreach (var c in pockets)
                     if (IsFilled(c)) n++;
             return n;
         }
 
-        private List<CellRef> Collect()
+        // Список того, что можно вырезать: id, категория и подпись предмета (для панели выбора).
+        internal static List<ExtractEntry> Entries(UIAutopsyWindow window)
+        {
+            var list = new List<ExtractEntry>();
+            if (window == null) return list;
+            try
+            {
+                var organs = OrganCells(window);
+                if (organs != null)
+                    for (int i = 0; i < organs.Count; i++)
+                    {
+                        var c = OrganCell(organs[i]);
+                        if (!IsUsable(c)) continue;
+                        list.Add(new ExtractEntry
+                        {
+                            Id = "organ:" + i,
+                            Category = ExtractCategory.Organ,
+                            Label = ItemLabel(c)
+                        });
+                    }
+                var pockets = PocketCells(window);
+                if (pockets != null)
+                    for (int i = 0; i < pockets.Count; i++)
+                    {
+                        var c = pockets[i];
+                        if (!IsUsable(c)) continue;
+                        list.Add(new ExtractEntry
+                        {
+                            Id = "pocket:" + i,
+                            Category = ExtractCategory.Pocket,
+                            Label = ItemLabel(c)
+                        });
+                    }
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning("entries: " + ex.Message); }
+            return list;
+        }
+
+        private static List<CellRef> Collect(UIAutopsyWindow window, ExtractSelection selection)
         {
             var list = new List<CellRef>();
-            if (!HasData()) return list;
-            var organs = OrganCells();
-            if (organs != null)
-                for (int i = 0; i < organs.Count; i++)
-                    if (IsUsable(OrganCell(organs[i])))
-                        list.Add(new CellRef("organ:" + i, CellKind.Organ));
-            var pockets = PocketCells();
-            if (pockets != null)
-                for (int i = 0; i < pockets.Count; i++)
-                    if (IsUsable(pockets[i]))
-                        list.Add(new CellRef("pocket:" + i, CellKind.Pocket));
+            foreach (var e in Entries(window))
+            {
+                if (selection != null && !selection.IsSelected(e.Id)) continue;
+                list.Add(new CellRef(e.Id, e.Category == ExtractCategory.Organ ? CellKind.Organ : CellKind.Pocket));
+            }
             return list;
+        }
+
+        // Хендлы ячеек окна: id <-> игровая ячейка (нужны режиму выбора).
+        internal sealed class CellHandles
+        {
+            internal readonly Dictionary<string, UIItemCell> ById = new Dictionary<string, UIItemCell>();
+            internal readonly Dictionary<int, string> ByCell = new Dictionary<int, string>();
+        }
+
+        internal static CellHandles Handles(UIAutopsyWindow window)
+        {
+            var h = new CellHandles();
+            try
+            {
+                foreach (var e in Entries(window))
+                {
+                    var c = CellById(window, e.Id);
+                    if (c == null) continue;
+                    h.ById[e.Id] = c;
+                    h.ByCell[c.GetInstanceID()] = e.Id;
+                }
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning("handles: " + ex.Message); }
+            return h;
+        }
+
+        internal static string IdOf(CellHandles handles, UIItemCell cell)
+        {
+            if (handles == null || cell == null) return null;
+            return handles.ByCell.TryGetValue(cell.GetInstanceID(), out var id) ? id : null;
+        }
+
+        internal static UIItemCell CellOf(CellHandles handles, string id)
+        {
+            if (handles == null || string.IsNullOrEmpty(id)) return null;
+            return handles.ById.TryGetValue(id, out var c) ? c : null;
+        }
+
+        private static UIItemCell CellById(UIAutopsyWindow window, string id)
+        {
+            var parts = id.Split(':');
+            if (parts.Length != 2 || !int.TryParse(parts[1], out int i)) return null;
+            if (parts[0] == "organ")
+            {
+                var organs = OrganCells(window);
+                return organs != null && i >= 0 && i < organs.Count ? OrganCell(organs[i]) : null;
+            }
+            var pockets = PocketCells(window);
+            return pockets != null && i >= 0 && i < pockets.Count ? pockets[i] : null;
+        }
+
+        private static string ItemLabel(UIItemCell c)        {
+            try
+            {
+                var item = c != null ? c.DisplayingItem : null;
+                var def = item != null ? item.Definition : null;
+                var name = def != null ? def.GetHeader() : null;
+                return string.IsNullOrEmpty(name) ? "?" : name;
+            }
+            catch { return "?"; }
         }
 
         private void Trigger(CellRef cell)
@@ -315,10 +415,10 @@ namespace GK2ExtractAll
             if (parts.Length != 2 || !int.TryParse(parts[1], out int i)) return null;
             if (parts[0] == "organ")
             {
-                var w = OrganCells();
+                var w = OrganCells(_window);
                 return w != null && i >= 0 && i < w.Count ? OrganCell(w[i]) : null;
             }
-            var p = PocketCells();
+            var p = PocketCells(_window);
             return p != null && i >= 0 && i < p.Count ? p[i] : null;
         }
 

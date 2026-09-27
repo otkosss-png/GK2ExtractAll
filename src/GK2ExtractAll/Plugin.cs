@@ -1,13 +1,14 @@
-using System;
+﻿using System;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using UnityEngine;
 using GK2ExtractAll.Core;
 
 namespace GK2ExtractAll
 {
     [BepInDependency("ru.superman4eg.gk2.framework")]
-    [BepInPlugin(Guid, "GK2 Extract All", "1.0.1")]
+    [BepInPlugin(Guid, "GK2 Extract All", "1.2.0")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "otkosss.gk2.extractall";
@@ -32,10 +33,49 @@ namespace GK2ExtractAll
 
             Lang = ResolveLanguage(Mod.Language.Value);
 
-            try { new HarmonyLib.Harmony(Guid).PatchAll(typeof(Plugin).Assembly); }
-            catch (Exception ex) { Logger.LogWarning("harmony patch failed: " + ex.Message); }
+            // Патчи применяем ПО КЛАССАМ и с try/catch: если один патч не сошёлся
+            // (Harmony биндит параметры по имени), остальные всё равно применятся.
+            try
+            {
+                var harmony = new HarmonyLib.Harmony(Guid);
+                foreach (var type in typeof(Plugin).Assembly.GetTypes())
+                {
+                    try { harmony.CreateClassProcessor(type).Patch(); }
+                    catch (Exception ex) { Logger.LogWarning("patch " + type.Name + " failed: " + ex.Message); }
+                }
+            }
+            catch (Exception ex) { Logger.LogWarning("harmony init failed: " + ex.Message); }
 
             Logger.LogInfo("GK2 Extract All " + Version + " loaded.");
+
+            // Значки выбора живут на своём оверлей-канвасе (как «пин» в Recipe Pin).
+            try { gameObject.AddComponent<ExtractMarks>(); }
+            catch (Exception ex) { Logger.LogWarning("marks component failed: " + ex.Message); }
+        }
+
+        // Пресет выбора помним между открытиями (all / organs / pockets / none).
+        internal static ExtractPreset Preset()
+        {
+            try { return ParsePreset(Mod != null && Mod.SelectionPreset != null ? Mod.SelectionPreset.Value : null); }
+            catch { return ExtractPreset.All; }
+        }
+
+        internal static void SetPreset(ExtractPreset preset)
+        {
+            try
+            {
+                if (Mod == null || Mod.SelectionPreset == null) return;
+                Mod.SelectionPreset.Value = preset.ToString().ToLowerInvariant();
+            }
+            catch { }
+        }
+
+        private static ExtractPreset ParsePreset(string value)
+        {
+            if (string.Equals(value, "organs", StringComparison.OrdinalIgnoreCase)) return ExtractPreset.Organs;
+            if (string.Equals(value, "pockets", StringComparison.OrdinalIgnoreCase)) return ExtractPreset.Pockets;
+            if (string.Equals(value, "none", StringComparison.OrdinalIgnoreCase)) return ExtractPreset.None;
+            return ExtractPreset.All;
         }
 
         private void EnsureSettings()
@@ -44,6 +84,7 @@ namespace GK2ExtractAll
             Mod.Language = Config.Bind("General", "Language", Mod.DefaultLanguage, "auto | en | ru");
             Mod.ButtonEnabled = Config.Bind("General", "Enabled", Mod.DefaultEnabled, "Show the 'Extract all' button");
             Mod.DelayMs = Config.Bind("General", "DelayMs", Mod.DefaultDelayMs, "Delay between extractions (ms)");
+            Mod.SelectionPreset = Config.Bind("General", "SelectionPreset", "all", "Remembered selection preset: all | organs | pockets | none");
         }
 
         internal static Lang ResolveLanguage(string value)

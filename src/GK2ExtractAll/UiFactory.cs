@@ -10,6 +10,10 @@ namespace GK2ExtractAll
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
+            // Игровые окна содержат layout-группы: без ignoreLayout они пересчитывают
+            // наши кнопки/подписи (размер и позицию) и кнопки наезжают друг на друга.
+            var le = go.AddComponent<UnityEngine.UI.LayoutElement>();
+            le.ignoreLayout = true;
             return (RectTransform)go.transform;
         }
 
