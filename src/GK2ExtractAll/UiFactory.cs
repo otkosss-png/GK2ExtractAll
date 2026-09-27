@@ -41,6 +41,59 @@ namespace GK2ExtractAll
             return t;
         }
 
+        // Ищет «эталонную» игровую подпись в том же окне: живой TMP-текст с
+        // назначенным шрифтом. У неё берём согласованную пару font+material —
+        // глобальный GameStyle.FontMaterial мог указывать на материал чужого
+        // шрифта (после установки сторонних модов) и текст не рисовался.
+        internal static TMP_Text FindReferenceLabel(Transform root)
+        {
+            if (root == null) return null;
+            TMP_Text fallback = null;
+            try
+            {
+                var all = root.GetComponentsInChildren<TMP_Text>(true);
+                foreach (var t in all)
+                {
+                    if (t == null || t.font == null || IsOwnObject(t.transform)) continue;
+                    if (string.IsNullOrEmpty(t.text))
+                    {
+                        if (fallback == null) fallback = t;
+                        continue;
+                    }
+                    return t;
+                }
+            }
+            catch { }
+            return fallback;
+        }
+
+        private static bool IsOwnObject(Transform t)
+        {
+            for (var p = t; p != null; p = p.parent)
+            {
+                if (p.name == "ExtractAllBtn" || p.name == "ResultLabel") return true;
+            }
+            return false;
+        }
+
+        // Применяет к нашей подписи пару font+material эталонной игровой подписи.
+        // Если эталона нет — берём GameStyle.Font и его собственный материал
+        // (чужой материал не копируем).
+        internal static void ApplyReferenceFont(TextMeshProUGUI target, TMP_Text reference)
+        {
+            if (target == null) return;
+            try
+            {
+                var font = reference != null && reference.font != null ? reference.font : GameStyle.Font;
+                if (font == null) return;
+                target.font = font;
+                var mat = reference != null ? reference.fontSharedMaterial : null;
+                if (mat == null) mat = font.material;
+                if (mat != null) target.fontSharedMaterial = mat;
+            }
+            catch { }
+        }
+
         // Применяет игровой спрайт кнопки к уже созданной кнопке (для Close/Center).
         internal static void ApplyButtonSprite(Button btn)
         {

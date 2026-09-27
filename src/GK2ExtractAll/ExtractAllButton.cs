@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using GK2ExtractAll.Core;
@@ -12,6 +13,8 @@ namespace GK2ExtractAll
     {
         private static readonly Dictionary<int, Button> _buttons = new Dictionary<int, Button>();
         private static readonly Dictionary<int, TextMeshProUGUI> _results = new Dictionary<int, TextMeshProUGUI>();
+        // Окна, для которых диагностику подписи уже выводили (один раз на создание).
+        private static readonly HashSet<int> _diagnosed = new HashSet<int>();
 
         // Данные окна лежат в защищённом поле "data" базового LazyWidget<UIAutopsyWindowData>.
         private static readonly FieldInfo _dataField = AccessTools.Field(typeof(UIAutopsyWindow), "data");
@@ -40,6 +43,12 @@ namespace GK2ExtractAll
 
             var parent = window.transform as RectTransform;
             if (parent == null) return;
+
+            // Источник согласованной пары font+material — живая игровая подпись
+            // в этом же окне. Глобальный GameStyle.FontMaterial мог указывать на
+            // материал чужого шрифта (после установки других модов) → текст кнопки
+            // не рисовался. Берём шрифт у эталона и не копируем случайный материал.
+            var reference = UiFactory.FindReferenceLabel(parent);
 
             // UIAutopsyWindow — кэшируемый синглтон: при повторном открытии могли
             // остаться созданные ранее объекты. Переиспользуем их по имени.
@@ -75,9 +84,52 @@ namespace GK2ExtractAll
                 label.gameObject.SetActive(false);
             }
 
+            // Перекрываем шрифт/материал наших подписей эталоном окна (или
+            // собственным материалом шрифта), не полагаясь на глобальный guess.
+            var buttonLabel = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+            UiFactory.ApplyReferenceFont(buttonLabel, reference);
+            UiFactory.ApplyReferenceFont(label, reference);
+
             _buttons[key] = btn;
             _results[key] = label;
             Plugin.Log.LogInfo("autopsy: extract-all button added");
+
+            if (_diagnosed.Add(key))
+            {
+                LogDiagnostic(buttonLabel, "extract-all-label");
+                LogDiagnostic(reference, "reference");
+            }
+        }
+
+        // Одноразовая диагностика: показывает реальное состояние подписи
+        // (главная зацепка при «кнопка без текста»).
+        private static void LogDiagnostic(TMP_Text t, string tag)
+        {
+            try
+            {
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                if (t == null)
+                {
+                    Plugin.Log.LogInfo("diag[" + tag + "]: <null>");
+                    return;
+                }
+                var c = t.color;
+                var rt = t.rectTransform;
+                var size = rt != null ? rt.rect.size : Vector2.zero;
+                var pos = rt != null ? rt.position : Vector3.zero;
+                Plugin.Log.LogInfo("diag[" + tag + "]: text=\"" + (t.text ?? "<null>") + "\""
+                    + " empty=" + string.IsNullOrEmpty(t.text)
+                    + " font=" + (t.font != null ? t.font.name : "<null>")
+                    + " mat=" + (t.fontSharedMaterial != null ? t.fontSharedMaterial.name : "<null>")
+                    + " color=(" + c.r.ToString("0.###", ci) + "," + c.g.ToString("0.###", ci)
+                    + "," + c.b.ToString("0.###", ci) + "," + c.a.ToString("0.###", ci) + ")"
+                    + " size=" + t.fontSize
+                    + " align=" + t.alignment
+                    + " rect=(" + size.x.ToString("0.#", ci) + "x" + size.y.ToString("0.#", ci) + ")"
+                    + " pos=(" + pos.x.ToString("0.#", ci) + "," + pos.y.ToString("0.#", ci)
+                    + "," + pos.z.ToString("0.#", ci) + ")");
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning("diag[" + tag + "] failed: " + ex.Message); }
         }
 
         internal static void Clear()
@@ -90,6 +142,7 @@ namespace GK2ExtractAll
                 if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value.gameObject);
             _buttons.Clear();
             _results.Clear();
+            _diagnosed.Clear();
             ExtractRunner.OnWindowHidden();
         }
 
