@@ -17,6 +17,9 @@ using the game's own extraction flow, or only the parts you mark.
   action button on an organ/pocket cell toggles its mark; RB (also LT) toggles the mark of the
   focused cell.
 - Sequential: one extraction per step, with a short configurable pause (no instant mass calls).
+  Each extraction is a timed craft at the table; the mod waits for it to finish before the
+  next one (1.2.2). Parts are tracked by item, so shifting cells and identical items
+  (several pieces of meat) are handled correctly.
 - Extractions that the game refuses (missing instrument, unknown organ, ...) are skipped and
   counted; a summary under the buttons shows **Extracted N of M**.
 - Selection markers live on their own overlay layer, so the game's own clicks still work

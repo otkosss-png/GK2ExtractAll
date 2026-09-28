@@ -14,6 +14,7 @@ namespace GK2ExtractAll
     {
         private const float PollStep = 0.05f;
         private const float PollTimeout = 1f;
+        private const float StallTimeout = 15f;
 
         private static ExtractRunner _instance;
         private UIAutopsyWindow _window;
@@ -23,6 +24,9 @@ namespace GK2ExtractAll
         // (confirm-колбэки вызывают UIAutopsyWindow.Close()) — не считаем это
         // закрытием пользователем и не останавливаем проход.
         private bool _confirming;
+        private bool _stalled;
+        // Стол вскрытия (WgoData) — приватное поле данных окна; нужен его CraftComponent.
+        private static readonly FieldInfo _autopsyTableField = AccessTools.Field(typeof(UIAutopsyWindowData), "autopsyTable");
 
         // Поля виджетов приватные; списки ячеек тоже приватные.
         private static readonly FieldInfo _organsField = AccessTools.Field(typeof(UIAutopsyWindow), "bodyOrgansInventoryWidget");
@@ -98,31 +102,54 @@ namespace GK2ExtractAll
         private IEnumerator Loop()
         {
             var queue = new ExtractQueue();
+            // Цели фиксируем ОДИН раз, по уникальным id предметов: ячейки "Прочее"
+            // сдвигаются после каждого вырезания (кровь из слота 1 переезжает в 0),
+            // поэтому номер ячейки между шагами указывает уже на другой предмет.
+            // Одинаковые предметы (куски мяса) делят UniqueId — ключ идёт с повтором.
             // Planned считаем по тому же предикату, что и выбор (IsUsable), иначе
             // заполненная, но недоступная ячейка раздувает знаменатель итога.
-            queue.Begin(Collect(_window, _selection).Count);
+            var targets = new List<string>();
+            foreach (var c in Collect(_window, _selection))
+            {
+                var key = KeyOf(CellById(_window, c.Id));
+                if (key != null) targets.Add(key);
+            }
+            queue.Begin(targets);
+            Plugin.Log.LogInfo("extract-all: start, targets " + queue.Planned);
             float delay = Mathf.Clamp(Plugin.Mod.DelayMs.Value, 100, 2000) / 1000f;
 
             while (true)
             {
-                var present = Collect(_window, _selection);
+                var present = Present();
                 if (queue.ShouldStop(present.Count)) break;
 
                 var next = queue.TakeNext(present);
                 if (next == null) break;
 
-                int before = CountItems();
+                int before = CopiesOf(next.Id);
                 Trigger(next);
                 yield return ConfirmStep(next.Kind, delay);
 
-                bool ok = CountItems() < before;
-                if (ok) queue.RecordExtracted(); // TakeNext уже пометил ячейку обработанной
-                else queue.RecordSkipped(next.Id);
+                // Вырезание — обычный крафт стола (у игрока идёт шкала прогресса).
+                // Игра ставит каждый новый крафт вскрытия В НАЧАЛО очереди, поэтому
+                // следующий шаг до окончания текущего перебивал бы его. Ждём.
+                var craft = CraftOf(_window);
+                yield return WaitCraftDone(craft);
+                if (_stalled)
+                {
+                    Plugin.Log.LogInfo("extract-all: craft stalled (player left the table?), stopping");
+                    queue.RecordSkipped(next.Id);
+                    break;
+                }
 
                 // Confirm-колбэк закрывает окно вскрытия; возвращаем его, чтобы
                 // следующие шаги шли штатно и итоговая подпись была видна.
                 ReopenIfClosed();
                 yield return null;
+
+                bool ok = CopiesOf(next.Id) < before;
+                if (ok) queue.RecordExtracted(next.Id);
+                else queue.RecordSkipped(next.Id);
             }
 
             string text = queue.Planned == 0
@@ -192,6 +219,47 @@ namespace GK2ExtractAll
             yield return new WaitForSeconds(delay);
         }
 
+        // Ждёт, пока стол вскрытия доделает очередь крафтов. Если прогресс не
+        // меняется StallTimeout секунд (игрок отошёл, крафт на паузе) — _stalled.
+        private IEnumerator WaitCraftDone(CraftComponent craft)
+        {
+            _stalled = false;
+            if (craft == null) yield break;
+            float idle = 0f;
+            string last = null;
+            while (true)
+            {
+                string state;
+                try
+                {
+                    if (!craft.HasCraftsInQueue) yield break;
+                    var cur = craft.CurrentCraftElement;
+                    state = craft.CraftElementsQueue.Count + "|" + craft.Status + "|"
+                        + (cur != null ? cur.ProgressTimeNormalized.ToString("F3") : "-");
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.LogWarning("wait craft: " + ex.Message);
+                    yield break;
+                }
+                if (state != last) { last = state; idle = 0f; }
+                else if ((idle += PollStep) >= StallTimeout) { _stalled = true; yield break; }
+                yield return new WaitForSeconds(PollStep);
+            }
+        }
+
+        private static CraftComponent CraftOf(UIAutopsyWindow window)
+        {
+            try
+            {
+                var data = ExtractAllButton.DataOf(window);
+                var table = data != null && _autopsyTableField != null
+                    ? _autopsyTableField.GetValue(data) as WgoData : null;
+                return table != null ? table.CraftComponent : null;
+            }
+            catch { return null; }
+        }
+
         private static UICraftSelectionWindow GetCraftWindow()
         {
             try { return LazyUI.GetWindow<UICraftSelectionWindow>(); }
@@ -231,16 +299,16 @@ namespace GK2ExtractAll
             try
             {
                 if (_window == null || _window.IsShown) return;
-                var data = ExtractAllButton.DataOf(_window);
+                // Черепа/данные тела UIAutopsyWindowData считает только в конструкторе,
+                // поэтому старые данные показывали бы тело до вырезания. Как и сама игра
+                // при открытии окна — создаём свежие данные по столу.
+                var old = ExtractAllButton.DataOf(_window);
+                var table = old != null && _autopsyTableField != null
+                    ? _autopsyTableField.GetValue(old) as WgoData : null;
+                var data = table != null ? new UIAutopsyWindowData(table) : old;
                 if (data != null) _window.Open(data);
             }
             catch (Exception ex) { Plugin.Log.LogWarning("reopen autopsy: " + ex.Message); }
-        }
-
-        private bool HasData()
-        {
-            try { return _window != null && ExtractAllButton.DataOf(_window) != null; }
-            catch { return false; }
         }
 
         private static List<UIFixedTypeItemCell> OrganCells(UIAutopsyWindow window)
@@ -265,19 +333,71 @@ namespace GK2ExtractAll
             catch { return null; }
         }
 
-        private int CountItems()
+        // Все заполненные ячейки окна: органы, затем "Прочее".
+        private IEnumerable<KeyValuePair<UIItemCell, CellKind>> Cells()
         {
-            if (!HasData()) return 0;
-            int n = 0;
             var organs = OrganCells(_window);
             if (organs != null)
                 foreach (var c in organs)
-                    if (IsFilled(OrganCell(c))) n++;
+                {
+                    var cell = OrganCell(c);
+                    if (IsFilled(cell)) yield return new KeyValuePair<UIItemCell, CellKind>(cell, CellKind.Organ);
+                }
             var pockets = PocketCells(_window);
             if (pockets != null)
-                foreach (var c in pockets)
-                    if (IsFilled(c)) n++;
+                foreach (var cell in pockets)
+                    if (IsFilled(cell)) yield return new KeyValuePair<UIItemCell, CellKind>(cell, CellKind.Pocket);
+        }
+
+        // Доступные предметы, что ещё лежат в теле; Id = ключ предмета.
+        // Какие из них — цели, решает очередь (ключи с остатком).
+        private List<CellRef> Present()
+        {
+            var list = new List<CellRef>();
+            try
+            {
+                foreach (var kv in Cells())
+                {
+                    var key = KeyOf(kv.Key);
+                    if (key != null && IsUsable(kv.Key))
+                        list.Add(new CellRef(key, kv.Value));
+                }
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning("present: " + ex.Message); }
+            return list;
+        }
+
+        // Сколько ячеек сейчас показывают предмет с этим ключом.
+        private int CopiesOf(string key)
+        {
+            int n = 0;
+            try
+            {
+                foreach (var kv in Cells())
+                    if (KeyOf(kv.Key) == key) n++;
+            }
+            catch { }
             return n;
+        }
+
+        private UIItemCell FindCell(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            foreach (var kv in Cells())
+                if (KeyOf(kv.Key) == key) return kv.Key;
+            return null;
+        }
+
+        // Ключ предмета в ячейке: уникальный id игры, иначе — ссылка на объект.
+        private static string KeyOf(UIItemCell c)
+        {
+            var item = c != null ? c.DisplayingItem : null;
+            if (item == null) return null;
+            var uid = item.UniqueId;
+            var id = uid != null ? uid.Id : null;
+            return !string.IsNullOrEmpty(id)
+                ? id
+                : "ref:" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(item);
         }
 
         // Список того, что можно вырезать: id, категория и подпись предмета (для панели выбора).
@@ -395,7 +515,7 @@ namespace GK2ExtractAll
             {
                 var data = ExtractAllButton.DataOf(_window);
                 if (data == null) return;
-                var c = Resolve(cell.Id);
+                var c = FindCell(cell.Id);
                 if (c == null) return;
                 if (cell.Kind == CellKind.Organ)
                 {
@@ -407,19 +527,6 @@ namespace GK2ExtractAll
                 }
             }
             catch (Exception ex) { Plugin.Log.LogWarning("extract step: " + ex.Message); }
-        }
-
-        private UIItemCell Resolve(string id)
-        {
-            var parts = id.Split(':');
-            if (parts.Length != 2 || !int.TryParse(parts[1], out int i)) return null;
-            if (parts[0] == "organ")
-            {
-                var w = OrganCells(_window);
-                return w != null && i >= 0 && i < w.Count ? OrganCell(w[i]) : null;
-            }
-            var p = PocketCells(_window);
-            return p != null && i >= 0 && i < p.Count ? p[i] : null;
         }
 
         private static UIItemCell OrganCell(UIFixedTypeItemCell c) => c != null ? c.UIItemCell : null;

@@ -12,45 +12,67 @@ public class QueueTests
     }
 
     [Fact]
-    public void Takes_present_cells_in_order()
+    public void Takes_present_targets_in_order()
     {
         var q = new ExtractQueue();
-        q.Begin(3);
-        var cells = Cells("organ:0", "organ:1", "organ:2");
-        Assert.Equal("organ:0", q.TakeNext(cells).Id);
-        Assert.Equal("organ:1", q.TakeNext(cells).Id);
+        q.Begin(new[] { "a", "b" });
+        var cells = Cells("a", "b");
+        Assert.Equal("a", q.TakeNext(cells).Id);
+        q.RecordExtracted("a");
+        Assert.Equal("b", q.TakeNext(Cells("b")).Id);
     }
 
     [Fact]
-    public void Skipped_cell_is_never_taken_again()
+    public void Ignores_present_items_that_are_not_targets()
     {
         var q = new ExtractQueue();
-        q.Begin(2);
-        var cells = Cells("organ:0", "organ:1");
-        var first = q.TakeNext(cells);
-        q.RecordSkipped(first.Id);
-        Assert.Equal("organ:1", q.TakeNext(cells).Id);
-        Assert.Equal(1, q.Skipped);
+        q.Begin(new[] { "b" });
+        Assert.Equal("b", q.TakeNext(Cells("a", "b")).Id);
     }
 
     [Fact]
-    public void Extracted_cell_is_not_retaken_when_still_present()
+    public void Same_key_counts_as_several_targets()
+    {
+        // Три куска мяса с одинаковым UniqueId: вырезать надо все три.
+        var q = new ExtractQueue();
+        q.Begin(new[] { "bone", "meat", "meat", "meat" });
+        Assert.Equal(4, q.Planned);
+        q.RecordExtracted("bone");
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal("meat", q.TakeNext(Cells("meat", "meat", "meat")).Id);
+            q.RecordExtracted("meat");
+        }
+        Assert.Equal(4, q.Extracted);
+        Assert.True(q.ShouldStop(1));
+    }
+
+    [Fact]
+    public void Extra_copies_beyond_selection_are_not_taken()
+    {
+        // Отмечено 1 мясо из 3 — после него остальные не трогаем.
+        var q = new ExtractQueue();
+        q.Begin(new[] { "meat" });
+        q.TakeNext(Cells("meat", "meat", "meat"));
+        q.RecordExtracted("meat");
+        Assert.Null(q.TakeNext(Cells("meat", "meat")));
+    }
+
+    [Fact]
+    public void Skipped_key_skips_all_its_copies()
     {
         var q = new ExtractQueue();
-        q.Begin(2);
-        var cells = Cells("organ:0", "organ:1");
-        var first = q.TakeNext(cells);
-        q.RecordExtracted();
-        q.MarkAttempted(first.Id);
-        Assert.Equal("organ:1", q.TakeNext(cells).Id);
-        Assert.Equal(1, q.Extracted);
+        q.Begin(new[] { "meat", "meat", "bone" });
+        q.RecordSkipped("meat");
+        Assert.Equal(2, q.Skipped);
+        Assert.Equal("bone", q.TakeNext(Cells("meat", "meat", "bone")).Id);
     }
 
     [Fact]
     public void Returns_null_when_nothing_left()
     {
         var q = new ExtractQueue();
-        q.Begin(1);
+        q.Begin(new[] { "a" });
         Assert.Null(q.TakeNext(new List<CellRef>()));
     }
 
@@ -58,8 +80,8 @@ public class QueueTests
     public void Stops_when_all_planned_are_done()
     {
         var q = new ExtractQueue();
-        q.Begin(1);
-        q.RecordExtracted();
+        q.Begin(new[] { "a" });
+        q.RecordExtracted("a");
         Assert.True(q.ShouldStop(1));
     }
 
@@ -67,7 +89,7 @@ public class QueueTests
     public void Stops_on_empty_corpse()
     {
         var q = new ExtractQueue();
-        q.Begin(3);
+        q.Begin(new[] { "a", "b", "c" });
         Assert.True(q.ShouldStop(0));
     }
 
@@ -75,10 +97,12 @@ public class QueueTests
     public void Stops_at_max_steps()
     {
         var q = new ExtractQueue();
-        q.Begin(1000);
+        var keys = new List<string>();
+        for (int i = 0; i < 1000; i++) keys.Add("k" + i);
+        q.Begin(keys);
         q.MaxSteps = 2;
-        q.RecordSkipped("a");
-        q.RecordSkipped("b");
+        q.RecordSkipped("k0");
+        q.RecordSkipped("k1");
         Assert.True(q.ShouldStop(999));
     }
 }
