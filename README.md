@@ -28,7 +28,16 @@ using the game's own extraction flow, or only the parts you mark.
 
 ## Settings (in-game Mods menu)
 
-- Language (en / ru / auto), button on/off, delay between extractions (100-2000 ms).
+- Language (auto = game language / en / ru / any file you add), button on/off, delay between
+  extractions (100-2000 ms), selection preset.
+
+## Translations (1.2.3)
+
+All texts live in `BepInEx\plugins\GK2ExtractAll\Localization\<lang>.json` (`en.json` and
+`ru.json` are written on first launch and never overwritten). To add a language, copy `en.json`
+to e.g. `de.json`, translate the values (keep `{0}`/`{1}`), restart the game and pick `de` in the
+Language setting. Missing or broken lines fall back to English. Keys starting with `settings.` /
+`mod.` translate the Mods settings screen (copied to GK2 Mod Framework's localization folder).
 
 ## Requirements
 
