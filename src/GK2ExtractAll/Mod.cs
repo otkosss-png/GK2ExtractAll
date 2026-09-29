@@ -1,3 +1,4 @@
+﻿using System.Collections.Generic;
 using BepInEx.Configuration;
 using GK2.Framework;
 
@@ -6,7 +7,7 @@ namespace GK2ExtractAll
     // Настройки появляются в игровом меню Mods (GK2 Mod Framework).
     internal sealed class Mod : Gk2ModBase
     {
-        internal const string DefaultLanguage = "en";
+        internal const string DefaultLanguage = "auto";
         internal const bool DefaultEnabled = true;
         internal const int DefaultDelayMs = 500;
 
@@ -14,7 +15,7 @@ namespace GK2ExtractAll
             "otkosss.gk2.extractall",
             "GK2 Extract All",
             "otkosss",
-            "1.2.2",
+            "1.2.3",
             "Adds an 'Extract all' button to the autopsy window: pulls every organ and pocket item out of a corpse.",
             false,
             false);
@@ -29,15 +30,18 @@ namespace GK2ExtractAll
         public override void OnRegister(Gk2ModContext context)
         {
             var s = context.Settings;
-            Language = s.AddDropdown("General", "Language", DefaultLanguage, new[] { "auto", "en", "ru" },
-                "Language / Язык", "en, ru, auto (system)", 10);
+            // Языки: auto + встроенные en/ru + все Localization\<код>.json рядом с модом.
+            var languages = new List<string> { "auto" };
+            languages.AddRange(ModLocalization.AvailableCodes());
+            Language = s.AddDropdown("General", "Language", DefaultLanguage, languages.ToArray(),
+                "Language", "auto = game language; or a code from the Localization folder (en, ru, de...)", 10);
             ButtonEnabled = s.AddToggle("General", "Enabled", DefaultEnabled,
-                "Кнопка «Извлечь всё»", "Показывать кнопку в окне вскрытия", 20);
+                "'Extract all' button", "Show the buttons in the autopsy window", 20);
             DelayMs = s.AddIntSlider("General", "DelayMs", DefaultDelayMs, 100, 2000,
-                "Задержка между извлечениями (мс)", "Как быстро идут шаги", 5, 30);
+                "Delay between extractions (ms)", "How fast the steps go", 5, 30);
             SelectionPreset = s.AddDropdown("General", "SelectionPreset", "all",
                 new[] { "all", "organs", "pockets", "none" },
-                "Пресет выбора", "Что отмечать в панели «Что вырезать» по умолчанию", 6);
+                "Selection preset", "What is marked by default in selection mode", 6);
         }
     }
 }

@@ -85,6 +85,11 @@ namespace GK2ExtractAll
             allRt.sizeDelta = new Vector2(250f, 54f);
             allRt.anchoredPosition = new Vector2(-140f, 40f);
 
+            // Окно кэшируется между открытиями: подпись обновляем, иначе смена языка
+            // в настройках дошла бы до кнопки только после перезапуска игры.
+            var allLabel = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (allLabel != null) allLabel.text = ExtractText.Button(Plugin.Lang);
+
             // Вторая кнопка: «Выбрать…» → включает режим (на ячейках появляются значки),
             // в режиме она же — «Вырезать». Значки живут на своём оверлей-канвасе
             // (как «пин» в Recipe Pin), клик по значку — вкл/выкл.

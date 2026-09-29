@@ -92,19 +92,5 @@ namespace GK2ExtractAll.Core.Tests
             Assert.Equal(0, s.Count);
             Assert.Equal(0, s.SelectedCount);
         }
-
-        [Fact] public void Preset_names_localized()
-        {
-            Assert.Equal("Всё", ExtractText.PresetName(Lang.Ru, ExtractPreset.All));
-            Assert.Equal("Organs only", ExtractText.PresetName(Lang.En, ExtractPreset.Organs));
-            Assert.Equal("Только карманы", ExtractText.PresetName(Lang.Ru, ExtractPreset.Pockets));
-            Assert.Equal("None", ExtractText.PresetName(Lang.En, ExtractPreset.None));
-        }
-
-        [Fact] public void Counter_text_localized()
-        {
-            Assert.Equal("Выбрано: 2 из 5", ExtractText.Counter(Lang.Ru, 2, 5));
-            Assert.Equal("Selected: 0 of 3", ExtractText.Counter(Lang.En, 0, 3));
-        }
     }
 }

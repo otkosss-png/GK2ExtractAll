@@ -8,17 +8,46 @@ using GK2ExtractAll.Core;
 namespace GK2ExtractAll
 {
     [BepInDependency("ru.superman4eg.gk2.framework")]
-    [BepInPlugin(Guid, "GK2 Extract All", "1.2.2")]
+    [BepInPlugin(Guid, "GK2 Extract All", "1.2.3")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "otkosss.gk2.extractall";
         public static ManualLogSource Log;
         internal static Mod Mod;
-        internal static Lang Lang = Lang.En;
+        private static TextPack _texts = TextPack.Builtin("en");
+        private static string _textsKey;
+        private static float _textsCheckedAt = -100f;
+
+        // Строки на текущем языке. «auto» следует за языком игры, поэтому раз в пару секунд
+        // перепроверяем (язык игры может загрузиться позже нас или смениться в настройках).
+        internal static TextPack Lang
+        {
+            get
+            {
+                try
+                {
+                    float now = Time.unscaledTime;
+                    if (now - _textsCheckedAt < 2f) return _texts;
+                    _textsCheckedAt = now;
+                    string setting = Mod != null && Mod.Language != null ? Mod.Language.Value : "auto";
+                    bool auto = string.IsNullOrWhiteSpace(setting) || string.Equals(setting, "auto", StringComparison.OrdinalIgnoreCase);
+                    string key = setting + "|" + (auto ? ModLocalization.GameLanguage() : "");
+                    if (key != _textsKey)
+                    {
+                        _textsKey = key;
+                        _texts = ModLocalization.Load(setting);
+                        Log?.LogInfo("language: setting=" + setting + " -> " + _texts.Code);
+                    }
+                }
+                catch (Exception ex) { Log?.LogWarning("language: " + ex.Message); }
+                return _texts;
+            }
+        }
 
         private void Awake()
         {
             Log = Logger;
+            ModLocalization.EnsureFiles();
 
             Mod = new Mod();
             try
@@ -30,8 +59,6 @@ namespace GK2ExtractAll
                 Logger.LogWarning("GK2 Framework register failed, using local config: " + ex.Message);
             }
             EnsureSettings();
-
-            Lang = ResolveLanguage(Mod.Language.Value);
 
             // Патчи применяем ПО КЛАССАМ и с try/catch: если один патч не сошёлся
             // (Harmony биндит параметры по имени), остальные всё равно применятся.
@@ -81,18 +108,10 @@ namespace GK2ExtractAll
         private void EnsureSettings()
         {
             if (Mod.DelayMs != null) return;
-            Mod.Language = Config.Bind("General", "Language", Mod.DefaultLanguage, "auto | en | ru");
+            Mod.Language = Config.Bind("General", "Language", Mod.DefaultLanguage, "auto (game language) or a code from the Localization folder: en, ru, de...");
             Mod.ButtonEnabled = Config.Bind("General", "Enabled", Mod.DefaultEnabled, "Show the 'Extract all' button");
             Mod.DelayMs = Config.Bind("General", "DelayMs", Mod.DefaultDelayMs, "Delay between extractions (ms)");
             Mod.SelectionPreset = Config.Bind("General", "SelectionPreset", "all", "Remembered selection preset: all | organs | pockets | none");
-        }
-
-        internal static Lang ResolveLanguage(string value)
-        {
-            if (string.Equals(value, "en", StringComparison.OrdinalIgnoreCase)) return Lang.En;
-            if (string.Equals(value, "ru", StringComparison.OrdinalIgnoreCase)) return Lang.Ru;
-            var two = System.Globalization.CultureInfo.CurrentUICulture?.TwoLetterISOLanguageName;
-            return string.Equals(two, "ru", StringComparison.OrdinalIgnoreCase) ? Lang.Ru : Lang.En;
         }
 
         internal static string Version => typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "1.0.0";
