@@ -1,0 +1,18 @@
+{
+  "button": "Extraer todo",
+  "select": "Seleccionar...",
+  "run_selected": "Extraer",
+  "counter": "Seleccionado: {0} de {1}",
+  "summary": "Extraídos {0} de {1}",
+  "nothing": "Nada que extraer",
+  "mod.name": "GK2 Extract All",
+  "mod.description": "Añade los botones 'Extraer todo' y 'Seleccionar...' a la ventana de autopsias.",
+  "settings.General.Language.name": "Idioma",
+  "settings.General.Language.description": "auto = idioma del juego; o un código de la carpeta Localization (en, ru, de...)",
+  "settings.General.Enabled.name": "Botón 'Extraer todo'",
+  "settings.General.Enabled.description": "Muestra los botones en la ventana de autopsias",
+  "settings.General.DelayMs.name": "Retardo entre extracciones (ms)",
+  "settings.General.DelayMs.description": "A qué velocidad avanzan los pasos",
+  "settings.General.SelectionPreset.name": "Preajuste de selección",
+  "settings.General.SelectionPreset.description": "Lo que se marca por defecto en el modo de selección"
+}
