@@ -13,6 +13,7 @@ namespace GK2ExtractAll
     {
         private TMP_Text _label;
         private string _checkedText;
+        private TMP_FontAsset _checkedFont;
 
         // Текст → подходящий шрифт (null = текущий годится). Кэш на всю сессию.
         private static readonly Dictionary<string, TMP_FontAsset> Cache = new Dictionary<string, TMP_FontAsset>(StringComparer.Ordinal);
@@ -27,11 +28,13 @@ namespace GK2ExtractAll
         {
             if (_label == null) _label = GetComponent<TMP_Text>();
             if (_label == null) return;
+            // Перепроверяем, когда сменился текст или шрифт (код мода мог снова поставить шрифт окна).
             var text = _label.text;
-            if (text == _checkedText) return;
-            _checkedText = text;
+            if (text == _checkedText && _label.font == _checkedFont) return;
             try { Fit(_label); }
             catch (Exception ex) { Plugin.Log.LogWarning("font fit: " + ex.Message); }
+            _checkedText = text;
+            _checkedFont = _label.font;
         }
 
         internal static void Fit(TMP_Text label)
