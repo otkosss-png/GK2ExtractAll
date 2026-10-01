@@ -42,6 +42,7 @@ namespace GK2ExtractAll
             t.alignment = align;
             t.color = color ?? GameStyle.Text;
             t.raycastTarget = false;
+            FontFitter.Attach(t); // перевод может требовать другой шрифт (CJK)
             return t;
         }
 
@@ -94,6 +95,7 @@ namespace GK2ExtractAll
                 var mat = reference != null ? reference.fontSharedMaterial : null;
                 if (mat == null) mat = font.material;
                 if (mat != null) target.fontSharedMaterial = mat;
+                FontFitter.Fit(target); // в шрифте эталона может не быть символов перевода
             }
             catch { }
         }
