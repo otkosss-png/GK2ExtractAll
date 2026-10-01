@@ -89,7 +89,40 @@ namespace GK2ExtractAll
                 if (f == null || !tried.Add(f)) continue;
                 if (Covers(f, text)) return f;
             }
+            // Шрифты других языков игра грузит только для своего языка, но у каждого её шрифта
+            // (LazyFontData) есть список замен по языкам (ko, ja, zh…) — загружаем их сами.
+            foreach (var f in LanguageFonts())
+            {
+                if (f == null || !tried.Add(f)) continue;
+                if (Covers(f, text)) return f;
+            }
             return null;
+        }
+
+        private static readonly System.Reflection.FieldInfo OverridesField =
+            HarmonyLib.AccessTools.Field(typeof(LazyBearTechnology.LazyFontData), "assetOverrideByLang");
+
+        private static IEnumerable<TMP_FontAsset> LanguageFonts()
+        {
+            var result = new List<TMP_FontAsset>();
+            try
+            {
+                foreach (var data in Resources.FindObjectsOfTypeAll<LazyBearTechnology.LazyFontData>())
+                {
+                    if (data == null || OverridesField == null) continue;
+                    if (!(OverridesField.GetValue(data) is System.Collections.IList list)) continue;
+                    foreach (var entry in list)
+                    {
+                        var langField = entry != null ? HarmonyLib.AccessTools.Field(entry.GetType(), "langId") : null;
+                        var lang = langField != null ? langField.GetValue(entry) as string : null;
+                        if (string.IsNullOrEmpty(lang)) continue;
+                        try { var f = data.GetFontAssetFor(lang, false, false); if (f != null) result.Add(f); }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning("font fit: language fonts: " + ex.Message); }
+            return result;
         }
     }
 }
