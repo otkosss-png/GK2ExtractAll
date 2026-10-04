@@ -8,7 +8,7 @@ using GK2ExtractAll.Core;
 namespace GK2ExtractAll
 {
     [BepInDependency("ru.superman4eg.gk2.framework")]
-    [BepInPlugin(Guid, "GK2 Extract All", "1.2.6")]
+    [BepInPlugin(Guid, "GK2 Extract All", "1.2.7")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "otkosss.gk2.extractall";
@@ -112,6 +112,7 @@ namespace GK2ExtractAll
             Mod.ButtonEnabled = Config.Bind("General", "Enabled", Mod.DefaultEnabled, "Show the 'Extract all' button");
             Mod.DelayMs = Config.Bind("General", "DelayMs", Mod.DefaultDelayMs, "Delay between extractions (ms)");
             Mod.SelectionPreset = Config.Bind("General", "SelectionPreset", "all", "Remembered selection preset: all | organs | pockets | none");
+            Mod.AllowZombies = Config.Bind("General", "AllowZombies", false, "Allow the mod to extract organs from zombies (the game only lets you swap them)");
         }
 
         internal static string Version => typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "1.0.0";

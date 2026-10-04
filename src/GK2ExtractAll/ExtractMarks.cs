@@ -53,6 +53,7 @@ namespace GK2ExtractAll
             try
             {
                 if (Instance == null || window == null) return;
+                if (ExtractAllButton.Blocked(window)) return; // зомби на столе — вырезать нельзя
                 var entries = ExtractRunner.Entries(window);
                 if (entries.Count == 0) return;
 

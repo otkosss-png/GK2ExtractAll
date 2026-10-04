@@ -26,6 +26,21 @@ namespace GK2ExtractAll
             catch { return null; }
         }
 
+        private static readonly FieldInfo _isZombieField = AccessTools.Field(typeof(UIAutopsyWindowData), "isZombie");
+
+        // На столе зомби, а вырезать у зомби не разрешено настройкой: игра сама даёт у зомби
+        // только менять органы, поэтому наши кнопки тогда прячем и ничего не вырезаем.
+        internal static bool Blocked(UIAutopsyWindow window)
+        {
+            try
+            {
+                if (Plugin.Mod != null && Plugin.Mod.AllowZombies != null && Plugin.Mod.AllowZombies.Value) return false;
+                var data = DataOf(window);
+                return data != null && _isZombieField != null && (bool)_isZombieField.GetValue(data);
+            }
+            catch { return false; }
+        }
+
         internal static void Ensure(UIAutopsyWindow window)
         {
             if (window == null) return;
@@ -33,7 +48,7 @@ namespace GK2ExtractAll
             int key = window.GetInstanceID();
             if (_buttons.TryGetValue(key, out var existing) && existing != null)
             {
-                bool on = Plugin.Mod.ButtonEnabled.Value;
+                bool on = Plugin.Mod.ButtonEnabled.Value && !Blocked(window);
                 existing.gameObject.SetActive(on);
                 existing.interactable = on && !IsEmpty(window);
                 var pickExisting = FindChild<Button>(window.transform as RectTransform, "ExtractPickBtn");
@@ -155,6 +170,11 @@ namespace GK2ExtractAll
             });
             ExtractNav.Attach(window.gameObject);
             Plugin.Log.LogInfo("autopsy: extract-all button added");
+            if (Blocked(window))
+            {
+                btn.gameObject.SetActive(false);
+                pick.gameObject.SetActive(false);
+            }
 
             if (_diagnosed.Add(key))
             {

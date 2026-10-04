@@ -15,7 +15,7 @@ namespace GK2ExtractAll
             "otkosss.gk2.extractall",
             "GK2 Extract All",
             "otkosss",
-            "1.2.6",
+            "1.2.7",
             "Adds an 'Extract all' button to the autopsy window: pulls every organ and pocket item out of a corpse.",
             false,
             false);
@@ -24,6 +24,7 @@ namespace GK2ExtractAll
         internal ConfigEntry<bool> ButtonEnabled;
         internal ConfigEntry<int> DelayMs;
         internal ConfigEntry<string> SelectionPreset;
+        internal ConfigEntry<bool> AllowZombies;
 
         public override Gk2ModMetadata Metadata => _metadata;
 
@@ -42,6 +43,9 @@ namespace GK2ExtractAll
             SelectionPreset = s.AddDropdown("General", "SelectionPreset", "all",
                 new[] { "all", "organs", "pockets", "none" },
                 "Selection preset", "What is marked by default in selection mode", 6);
+            // Игра у зомби органы только меняет (вырезать нельзя) — мод по умолчанию тоже.
+            AllowZombies = s.AddToggle("General", "AllowZombies", false,
+                "Allow extracting from zombies", "The game only lets you swap a zombie's organs. On: the mod's buttons also extract them (you keep the organs)", 40);
         }
     }
 }

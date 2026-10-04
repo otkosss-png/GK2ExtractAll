@@ -67,6 +67,11 @@ namespace GK2ExtractAll
         internal static void Start(UIAutopsyWindow window, ExtractSelection selection)
         {
             if (window == null) return;
+            if (ExtractAllButton.Blocked(window))
+            {
+                Plugin.Log.LogInfo("extract-all: zombie on the table - extracting is off (Mods > Extract All > Allow extracting from zombies)");
+                return;
+            }
             if (_instance == null)
             {
                 var go = new GameObject("GK2ExtractAllRunner");
