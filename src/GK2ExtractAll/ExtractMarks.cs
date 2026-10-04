@@ -145,7 +145,9 @@ namespace GK2ExtractAll
             _canvasGo.transform.SetParent(transform, false);
             var canvas = _canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 6000;   // выше окон игры — значок всегда кликается
+            // Выше окон игры (LazyWindow: 400 + 15 за окно), но ниже подсказок (tooltip = 700):
+            // иначе значки рисовались поверх всплывающего окна органа.
+            canvas.sortingOrder = 690;
             var scaler = _canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
@@ -208,6 +210,7 @@ namespace GK2ExtractAll
             if (!_active || _canvasGo == null || _handles == null) return;
             try
             {
+                SyncSortingOrder();
                 var canvasRt = (RectTransform)_canvasGo.transform;
                 foreach (var kv in _badges)
                 {
@@ -226,6 +229,27 @@ namespace GK2ExtractAll
                         rt.anchoredPosition = local + new Vector2(14f, -14f);                }
             }
             catch (Exception ex) { Plugin.Log.LogWarning("marks follow: " + ex.Message); }
+        }
+
+        // Слой значков — ровно на 1 выше окна вскрытия: окна, открытые поверх него (+15 за окно),
+        // и подсказки игры (700) закрывают значки, как и само окно.
+        private void SyncSortingOrder()
+        {
+            try
+            {
+                var canvas = _canvasGo.GetComponent<Canvas>();
+                if (canvas == null || _window == null) return;
+                int order = int.MinValue;
+                foreach (var c in _window.GetComponentsInParent<Canvas>(true))
+                    if (c.isRootCanvas || c.overrideSorting) order = Math.Max(order, c.sortingOrder);
+                if (order == int.MinValue) return;
+                if (canvas.sortingOrder != order + 1)
+                {
+                    canvas.sortingOrder = order + 1;
+                    Plugin.Log.LogInfo("extract-all: marks layer " + canvas.sortingOrder + " (window " + order + ")");
+                }
+            }
+            catch { }
         }
 
         private void Refresh()

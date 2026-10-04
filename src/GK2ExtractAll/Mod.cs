@@ -15,7 +15,7 @@ namespace GK2ExtractAll
             "otkosss.gk2.extractall",
             "GK2 Extract All",
             "otkosss",
-            "1.2.5",
+            "1.2.6",
             "Adds an 'Extract all' button to the autopsy window: pulls every organ and pocket item out of a corpse.",
             false,
             false);
