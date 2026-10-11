@@ -218,15 +218,23 @@ namespace GK2ExtractAll
         {
             // Hide() лишь деактивирует окно, поэтому созданные дочерние объекты
             // надо реально уничтожить — иначе повторное открытие их накопит.
+            // Destroy срабатывает только в конце кадра: если окно откроется в том же кадре, FindChild
+            // нашёл бы «умирающую» кнопку по имени и взял её — а потом она бы исчезла. Поэтому перед
+            // уничтожением переименовываем и прячем. И уничтожаем ОБЕ кнопки: раньше «Выбрать…»
+            // переживала закрытие окна, а «Извлечь всё» — нет, и кнопки жили по разным правилам.
             foreach (var kv in _buttons)
                 if (kv.Value != null)
                 {
                     var w = kv.Value.transform.parent;
-                    if (w != null) ExtractNav.Unregister(w.gameObject);
-                    UnityEngine.Object.Destroy(kv.Value.gameObject);
+                    if (w != null)
+                    {
+                        ExtractNav.Unregister(w.gameObject);
+                        Retire(FindChild<Button>(w, "ExtractPickBtn")?.gameObject);
+                    }
+                    Retire(kv.Value.gameObject);
                 }
             foreach (var kv in _results)
-                if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value.gameObject);
+                if (kv.Value != null) Retire(kv.Value.gameObject);
             _buttons.Clear();
             _results.Clear();
             _diagnosed.Clear();
@@ -257,6 +265,14 @@ namespace GK2ExtractAll
                     : ExtractText.SelectButton(Plugin.Lang);
             }
             catch { }
+        }
+
+        private static void Retire(GameObject go)
+        {
+            if (go == null) return;
+            go.name = go.name + "_dead";
+            go.SetActive(false);
+            UnityEngine.Object.Destroy(go);
         }
 
         private static T FindChild<T>(Transform parent, string name) where T : Component
