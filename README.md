@@ -41,15 +41,20 @@ Language setting. Missing or broken lines fall back to English. Keys starting wi
 
 ## Requirements
 
-- Graveyard Keeper 2 (Steam).
-- BepInEx 5.4.23.5 x64 and **GK2 Mod Framework** (both installed by
-  [GK2 Mod Installer](https://github.com/otkosss-png/GK2ModInstaller)).
+- Graveyard Keeper 2 (Steam), game version 1.011 or newer (it ships BepInEx and loads
+  Workshop mods by itself).
+- **GK2 Mod Framework is optional (since 1.2.9).** With it, the settings appear in the in-game
+  **Mods** menu; without it the mod still works and its settings live in the config file
+  `BepInEx\config\*.cfg`.
 
 ## Install
 
-Copy `BepInEx/plugins/GK2ExtractAll/GK2ExtractAll.dll` into
-`<game>\BepInEx\plugins\GK2ExtractAll\`, or install the Workshop item via the
-[GK2 Workshop Auto-Loader](https://steamcommunity.com/sharedfiles/filedetails/?id=3807406994).
+Subscribe to the mod on the Steam Workshop - that is all. Or copy the `BepInEx` folder from the
+release zip into the game folder by hand.
+
+Steam Deck / Linux: set the launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%`.
+
+Do not use the old GK2 Workshop Auto-Loader any more - the game now does its job.
 
 ## Build
 

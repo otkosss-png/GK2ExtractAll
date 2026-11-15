@@ -108,9 +108,25 @@ namespace GK2ExtractAll
 
         internal static string GameLanguage()
         {
-            try { return GK2.Framework.FrameworkLocalization.CurrentLanguage ?? "en"; }
+            if (Plugin.HasFramework)
+            {
+                try { return FrameworkLanguage(); }
+                catch { return "en"; }
+            }
+            try
+            {
+                var sys = UnityEngine.Application.systemLanguage;
+                return sys == UnityEngine.SystemLanguage.Russian ? "ru" : "en";
+            }
             catch { return "en"; }
         }
+
+        // Отдельные методы: тип FrameworkLocalization грузится только при их JIT.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string FrameworkLanguage() => GK2.Framework.FrameworkLocalization.CurrentLanguage ?? "en";
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void FrameworkReload(string modId) => GK2.Framework.FrameworkLocalization.Reload(modId);
 
         private static IEnumerable<string> Candidates(string code)
         {
@@ -154,7 +170,10 @@ namespace GK2ExtractAll
         // Строки mod.*/settings.* из каждого нашего файла — в папку переводов GK2 Mod Framework.
         private static void SyncFrameworkSettings()
         {
-            var target = Path.Combine(BepInEx.Paths.PluginPath, "GK2.Framework", "Localization", ModId);
+            // Папку Framework не создаём, если его нет.
+            var fwDir = Path.Combine(BepInEx.Paths.PluginPath, "GK2.Framework");
+            if (!Directory.Exists(fwDir)) return;
+            var target = Path.Combine(fwDir, "Localization", ModId);
             Directory.CreateDirectory(target);
             foreach (var code in AvailableCodes())
             {
@@ -169,7 +188,10 @@ namespace GK2ExtractAll
                 if (settings.Count == 0) continue;
                 WriteIfChanged(Path.Combine(target, code + ".json"), JsonConvert.SerializeObject(settings, Formatting.Indented));
             }
-            try { GK2.Framework.FrameworkLocalization.Reload(ModId); } catch { }
+            if (Plugin.HasFramework)
+            {
+                try { FrameworkReload(ModId); } catch { }
+            }
         }
 
         private static void WriteIfChanged(string path, string content)

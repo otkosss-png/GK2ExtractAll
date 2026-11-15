@@ -7,13 +7,15 @@ using GK2ExtractAll.Core;
 
 namespace GK2ExtractAll
 {
-    [BepInDependency("ru.superman4eg.gk2.framework")]
-    [BepInPlugin(Guid, "GK2 Extract All", "1.2.8")]
+    // Framework — мягкая зависимость: есть — настройки в меню Mods; нет — мод работает, настройки в cfg.
+    [BepInDependency(FrameworkGuid, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInPlugin(Guid, "GK2 Extract All", "1.2.9")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "otkosss.gk2.extractall";
+        internal const string FrameworkGuid = "ru.superman4eg.gk2.framework";
         public static ManualLogSource Log;
-        internal static Mod Mod;
+        internal static ModSettings Mod;
         private static TextPack _texts = TextPack.Builtin("en");
         private static string _textsKey;
         private static float _textsCheckedAt = -100f;
@@ -47,16 +49,21 @@ namespace GK2ExtractAll
         private void Awake()
         {
             Log = Logger;
+            HasFramework = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(FrameworkGuid);
             ModLocalization.EnsureFiles();
 
-            Mod = new Mod();
-            try
+            Mod = new ModSettings();
+            if (HasFramework)
             {
-                GK2.Framework.FrameworkApi.RegisterMod(Mod, Config);
+                try { RegisterWithFramework(); }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("GK2 Framework register failed, using local config: " + ex.Message);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Logger.LogWarning("GK2 Framework register failed, using local config: " + ex.Message);
+                Logger.LogInfo("GK2 Mod Framework not installed: using BepInEx\\config settings (no in-game Mods menu).");
             }
             EnsureSettings();
 
@@ -65,7 +72,7 @@ namespace GK2ExtractAll
             try
             {
                 var harmony = new HarmonyLib.Harmony(Guid);
-                foreach (var type in typeof(Plugin).Assembly.GetTypes())
+                foreach (var type in LoadableTypes())
                 {
                     try { harmony.CreateClassProcessor(type).Patch(); }
                     catch (Exception ex) { Logger.LogWarning("patch " + type.Name + " failed: " + ex.Message); }
@@ -78,6 +85,27 @@ namespace GK2ExtractAll
             // Значки выбора живут на своём оверлей-канвасе (как «пин» в Recipe Pin).
             try { gameObject.AddComponent<ExtractMarks>(); }
             catch (Exception ex) { Logger.LogWarning("marks component failed: " + ex.Message); }
+        }
+
+        internal static bool HasFramework;
+
+        // Без Framework тип FrameworkMod не загрузится и GetTypes() бросит
+        // ReflectionTypeLoadException — берём только успешно загруженные типы.
+        private static System.Collections.Generic.IEnumerable<Type> LoadableTypes()
+        {
+            Type[] types;
+            try { types = typeof(Plugin).Assembly.GetTypes(); }
+            catch (System.Reflection.ReflectionTypeLoadException ex) { types = ex.Types; }
+            foreach (var t in types)
+                if (t != null && t.Name != "FrameworkMod") yield return t; // не typeof: тот грузит тип
+        }
+
+        // Отдельный метод: типы Framework подгружаются только при его JIT,
+        // а он вызывается лишь когда Framework найден.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private void RegisterWithFramework()
+        {
+            GK2.Framework.FrameworkApi.RegisterMod(new FrameworkMod(), Config);
         }
 
         // Пресет выбора помним между открытиями (all / organs / pockets / none).
@@ -107,12 +135,11 @@ namespace GK2ExtractAll
 
         private void EnsureSettings()
         {
-            if (Mod.DelayMs != null) return;
-            Mod.Language = Config.Bind("General", "Language", Mod.DefaultLanguage, "auto (game language) or a code from the Localization folder: en, ru, de...");
-            Mod.ButtonEnabled = Config.Bind("General", "Enabled", Mod.DefaultEnabled, "Show the 'Extract all' button");
-            Mod.DelayMs = Config.Bind("General", "DelayMs", Mod.DefaultDelayMs, "Delay between extractions (ms)");
-            Mod.SelectionPreset = Config.Bind("General", "SelectionPreset", "all", "Remembered selection preset: all | organs | pockets | none");
-            Mod.AllowZombies = Config.Bind("General", "AllowZombies", false, "Allow the mod to extract organs from zombies (the game only lets you swap them)");
+            if (Mod.Language == null) Mod.Language = Config.Bind("General", "Language", ModSettings.DefaultLanguage, "auto (game language) or a code from the Localization folder: en, ru, de...");
+            if (Mod.ButtonEnabled == null) Mod.ButtonEnabled = Config.Bind("General", "Enabled", ModSettings.DefaultEnabled, "Show the 'Extract all' button");
+            if (Mod.DelayMs == null) Mod.DelayMs = Config.Bind("General", "DelayMs", ModSettings.DefaultDelayMs, "Delay between extractions (ms)");
+            if (Mod.SelectionPreset == null) Mod.SelectionPreset = Config.Bind("General", "SelectionPreset", "all", "Remembered selection preset: all | organs | pockets | none");
+            if (Mod.AllowZombies == null) Mod.AllowZombies = Config.Bind("General", "AllowZombies", false, "Allow the mod to extract organs from zombies (the game only lets you swap them)");
         }
 
         internal static string Version => typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "1.0.0";
